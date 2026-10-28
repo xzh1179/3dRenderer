@@ -65,7 +65,7 @@ void SwapVertex4D(RenVertex4DPtr v1, RenVertex4DPtr v2)
 {
 	RenVertex4D tmp;
 	tmp = *v1;
-	*v1 = *v2; 
+	*v1 = *v2;
 	*v2 = tmp;
 }
 
@@ -82,7 +82,8 @@ COLORREF RenColorToCOLORREF(RenColor c)
 	return RGB(c.red, c.green, c.blue);
 }
 
-RenVector4D fscanVector4(FILE* fp) {
+RenVector4D fscanVector4(FILE* fp)
+{
 	assert(fp);
 	float arr[4];
 	for (int i = 0; i < 4; i++) {
@@ -90,7 +91,8 @@ RenVector4D fscanVector4(FILE* fp) {
 	}
 	return RenVector4D(arr);
 }
-RenVector3D fscanVector3(FILE* fp) {
+RenVector3D fscanVector3(FILE* fp)
+{
 	assert(fp);
 	float arr[3];
 	for (int i = 0; i < 3; i++) {
@@ -100,7 +102,8 @@ RenVector3D fscanVector3(FILE* fp) {
 	ret.SetValue(arr[0], arr[1], arr[2]);
 	return ret;
 }
-RenVector2D fscanVector2(FILE* fp) {
+RenVector2D fscanVector2(FILE* fp)
+{
 	assert(fp);
 	float arr[2];
 	for (int i = 0; i < 2; i++) {
@@ -123,41 +126,80 @@ RenVector3D vector4DTo3D(RenVector4D v3d)
 	return ret;
 }
 
+
 void RotateAroundXAxis(RenVector4D& p, float rad)
 {
-	p.y = p.y * cos(rad) - p.z * sin(rad);
-	p.z = p.y * sin(rad) + p.z * cos(rad);
+	const float c = cos(rad);
+	const float s = sin(rad);
+
+	const float y = p.y;
+	const float z = p.z;
+
+	p.y = y * c - z * s;
+	p.z = y * s + z * c;
 }
 
 void RotateAroundYAxis(RenVector4D& p, float rad)
 {
-	p.x = p.x * cos(rad) + p.z * sin(rad);
-	p.z = - p.x * sin(rad) + p.z * cos(rad);
+	const float c = cos(rad);
+	const float s = sin(rad);
+
+	const float x = p.x;
+	const float z = p.z;
+
+	p.x = x * c + z * s;
+	p.z = -x * s + z * c;
 }
 
 void RotateAroundZAxis(RenVector4D& p, float rad)
 {
-	p.x = p.x * cos(rad) - p.y * sin(rad);
-	p.y = p.x * sin(rad) + p.y * cos(rad);
+	const float c = cos(rad);
+	const float s = sin(rad);
+
+	const float x = p.x;
+	const float y = p.y;
+
+	p.x = x * c - y * s;
+	p.y = x * s + y * c;
 }
 
 void RotateAroundXAxis(RenVector3D& p, float rad)
 {
-	p.y = p.y * cos(rad) - p.z * sin(rad);
-	p.z = p.y * sin(rad) + p.z * cos(rad);
+	const float c = cos(rad);
+	const float s = sin(rad);
+
+	const float y = p.y;
+	const float z = p.z;
+
+	p.y = y * c - z * s;
+	p.z = y * s + z * c;
 }
 
 void RotateAroundYAxis(RenVector3D& p, float rad)
 {
-	p.x = p.x * cos(rad) + p.z * sin(rad);
-	p.z = -p.x * sin(rad) + p.z * cos(rad);
+	const float c = cos(rad);
+	const float s = sin(rad);
+
+	const float x = p.x;
+	const float z = p.z;
+
+	p.x = x * c + z * s;
+	p.y = p.y;
+	p.z = -x * s + z * c;
 }
 
 void RotateAroundZAxis(RenVector3D& p, float rad)
 {
-	p.x = p.x * cos(rad) - p.y * sin(rad);
-	p.y = p.x * sin(rad) + p.y * cos(rad);
+	const float c = cos(rad);
+	const float s = sin(rad);
+
+	const float x = p.x;
+	const float y = p.y;
+
+	p.x = x * c - y * s;
+	p.y = x * s + y * c;
 }
+
 void Interpolate(float x1, float y1, float x2, float y2, float x3, float y3, float x, float y, float c[3])
 {
 

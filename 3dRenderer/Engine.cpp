@@ -1,15 +1,25 @@
-#include "Engine.h"
-
-#include "RendererLib.h"
-#include "string.h"
 #include <stdlib.h>
 #include <stdio.h>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <Windows.h>
 #include <wingdi.h>
 #include <cassert>
 #include <vector>
-
+#include <cmath>
+#include <algorithm>
+#include "string.h"
+#include "Engine.h"
+#include "RendererLib.h"
 #include "Utils.h"
+
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
 
 
 
@@ -43,18 +53,27 @@ void RenEngine::RenderInit(int x1, int y1, int w1, int h1)
 	//LoadTriangleObject();
 	LoadObjectFormModelASE("res/ASEModels", "teaport.ASE");
 	LoadObjectFormModelASE("res/ASEModels", "box.ASE");
-	renObjectList[0].renderingMode = RENDERING_MODE_WIREFRAME;
+	renObjectList[0].renderingMode = RENDERING_MODE_TEXTURE;
 	renObjectList[1].renderingMode = RENDERING_MODE_TEXTURE;
+
+	// debug 
+	RenMaterial& mat = renObjectList[0].materialList[0];
+
+	mat.ambient = RenVector4D(0.22f, 0.22f, 0.22f, 1.0f);
+	mat.diffuse = RenVector4D(0.65f, 0.65f, 0.65f, 1.0f);
+	mat.specular = RenVector4D(0.80f, 0.80f, 0.80f, 1.0f);
+	// debug end 
+
 	RenVector3D worldPos(100, 0, 0);
-	LocalTransformation(worldPos, PI/2, 0, 0, 0.3,0);
+	LocalTransformation(worldPos, PI / 2, 0, 0, 0.3, 0);
 	RenVector3D cameraLoc(20, -13, -10);
 	renCamera.InitCamera(1, 10000, cameraLoc);
 	RenColor ambientColor(0.6, 0.6, 0.6, 1);
-	RenVector4D dir(0, 0, 1, 1);
+	RenVector4D dir(0.0f, -1.0f, 1.0f, 0.0f);
 	RenVector4D loc(0, 0, -50, 1);
 	AddLight(RENLIGHT_ATT_AMBIENT, 0.8, ambientColor, dir, loc);
 	RenColor directionalColor(0.6, 0.6, 0.6, 1);
-	AddLight(RENLIGHT_ATT_DIRECTIONAL, 0.3, directionalColor, dir, loc);
+	AddLight(RENLIGHT_ATT_DIRECTIONAL, 1.0, directionalColor, dir, loc);
 	zBuffer = new float[w * h];
 	for (int i = 0; i < w * h - 1; i++)
 	{
@@ -74,7 +93,7 @@ void RenEngine::RenderLoop()
 			tmpObj->triangleList[j].resetNormal();
 		}
 	}
-	RenVector4D worldPos(0,0,40,1);
+	RenVector4D worldPos(0, 0, 40, 1);
 	LocalToWorldTransformation(worldPos);
 	Lighting();
 	//BackFaceDetection();
@@ -93,12 +112,19 @@ void RenEngine::GenerateRenderingList()
 	RenObjectPtr tmpObjPtr;
 	RenTriangle tri;
 	RenPrimitive p;
+	int renderingListIdx = 0;
 	for (int i = 0; i < numberOfObjects; i++)
 	{
 		tmpObjPtr = &(renObjectList[i]);
 		for (int j = 0; j < tmpObjPtr->numberOfTriangles; j++)
 		{
 			tri = tmpObjPtr->triangleList[j];
+
+			for (int k = 0; k < 3; k++)
+			{
+				p.v[k].diffuse = tri.vertexDiffuse[k];
+				p.v[k].specular = tri.vertexSpecular[k];
+			}
 
 			p.v[0].p = tmpObjPtr->transferredPointList[(int)tri.pointIndex.p1];
 			p.v[1].p = tmpObjPtr->transferredPointList[(int)tri.pointIndex.p2];
@@ -107,6 +133,8 @@ void RenEngine::GenerateRenderingList()
 			p.v[1].t = tmpObjPtr->textureCoorList[(int)tri.texIndex.y];
 			p.v[2].t = tmpObjPtr->textureCoorList[(int)tri.texIndex.z];
 			p.angNormalDiffuseLight = tri.angNormalDiffuseLight;
+			p.specularLight = tri.specularLight;
+			// p.specularLight = 0.0f;
 			if (tri.state == BACKFACE_DETECTION_REMOVED)
 			{
 				p.state = PRIMITIVE_STATE_NON_ACTIVE;
@@ -116,28 +144,31 @@ void RenEngine::GenerateRenderingList()
 				p.state = PRIMITIVE_STATE_ACTIVE;
 			}
 			p.objetcIndex = i;
-			renRenderingList[j] = p;
+			renRenderingList[renderingListIdx] = p;
+			renderingListIdx += 1;
 		}
 	}
 }
+
 void RenEngine::PreRendering()
 {
 }
+
 void RenEngine::RenderExit()
 {
-	delete zBuffer;
+	delete[] zBuffer;
 	zBuffer = NULL;
 }
 
 void RenEngine::AddLight(int att, float intensity, RenColor c, RenVector4D dir, RenVector4D loc)
 {
-	renLight[numberOfLights].InitLight (att,intensity, c,dir,loc);
+	renLight[numberOfLights].InitLight(att, intensity, c, dir, loc);
 	numberOfLights++;
 }
 
 void RenEngine::LoadTriangleObject()
 {
-	char tmpName [] = "testTriangleObj";
+	char tmpName[] = "testTriangleObj";
 	//strcpy(renObjectList[numberOfObjects].name, tmpName);
 	RenColor c(255, 0, 0, 1); //red
 	RenPoint4D p1(0, 10, 50, 1);
@@ -155,8 +186,8 @@ void RenEngine::LoadTriangleObject()
 	renObjectList[numberOfObjects].textureCoorList[0] = t1;
 	renObjectList[numberOfObjects].textureCoorList[1] = t2;
 	renObjectList[numberOfObjects].textureCoorList[2] = t3;
-	RenTriangle tmpTriangle(0,1,2,0,1,2);
-	
+	RenTriangle tmpTriangle(0, 1, 2, 0, 1, 2);
+
 	tmpTriangle.pointListPtr = (renObjectList[numberOfObjects].transferredPointList);
 	CalculateTriangleNormal(&tmpTriangle);
 
@@ -164,307 +195,307 @@ void RenEngine::LoadTriangleObject()
 	renObjectList[numberOfObjects].numberOfPoints = 3;
 	renObjectList[numberOfObjects].maxRadius = 5;
 	renObjectList[numberOfObjects].numberOfTriangles = 1;
-	
-	numberOfObjects ++;
+
+	numberOfObjects++;
 }
 
 void RenEngine::LoadObjectFormModelASE(const string& folderPath, const string& fileName)
 {
-		//------------------full path of file
-		string fileFullPath = folderPath + "/" + fileName;
-		//open file
-		FILE* fp = NULL;
-		fp = fopen(fileFullPath.c_str(), "r");// write
-		if (fp == NULL) {
-			cout << "Open " << fileFullPath << " failed!" << endl;
+	//------------------full path of file
+	string fileFullPath = folderPath + "/" + fileName;
+	//open file
+	FILE* fp = NULL;
+	fp = fopen(fileFullPath.c_str(), "r");// write
+	if (fp == NULL) {
+		cout << "Open " << fileFullPath << " failed!" << endl;
+		assert(false);
+	}
+	//------------------read file
+	vector<RenVector3D> posList;
+	vector<RenVector3D> faceList;
+	int materialRef = 0;
+	vector<RenTextureCoor> tvertexList;
+	vector<RenVector3D> tfaceList;
+
+	vector<RenVector3D> faceNormList;
+	vector<RenVector3D> faceV0NormList;
+	vector<RenVector3D> faceV1NormList;
+	vector<RenVector3D> faceV2NormList;
+
+	vector<RenVector3D> ambientList;
+	vector<RenVector3D> diffuseList;
+	vector<float> shineStrengthList;
+	vector<float> shineList;
+	vector<RenVector3D> specularList;
+
+	vector<string> texFileNameList;
+
+	{
+		fscanStr(fp, "*3DSMAX_ASCIIEXPORT");
+		fscanInt(fp);
+		fscanStr(fp, "*COMMENT");
+		fscanOneQuotation(fp);
+		fscanStr(fp, "*SCENE");
+		fscanStr(fp, "{");
+		fscanStr(fp, "*SCENE_FILENAME");
+		fscanOneQuotation(fp);
+		fscanStr(fp, "*SCENE_FIRSTFRAME");
+		fscanInt(fp);
+		fscanStr(fp, "*SCENE_LASTFRAME");
+		fscanInt(fp);
+		fscanStr(fp, "*SCENE_FRAMESPEED");
+		fscanInt(fp);
+		fscanStr(fp, "*SCENE_TICKSPERFRAME");
+		fscanInt(fp);
+		fscanStr(fp, "*SCENE_BACKGROUND_STATIC");
+		fscanVector3(fp);
+		fscanStr(fp, "*SCENE_AMBIENT_STATIC");
+		fscanVector3(fp);
+		fscanStr(fp, "}");
+		fscanStr(fp, "*MATERIAL_LIST");
+		fscanStr(fp, "{");
+		fscanStr(fp, "*MATERIAL_COUNT");
+		int materialCount = fscanInt(fp);
+		for (int materialIndex = 0; materialIndex < materialCount; materialIndex++) {
+			fscanStr(fp, "*MATERIAL");
+			int materialID = fscanInt(fp);
+			assert(materialID == materialIndex);
+			fscanStr(fp, "{");
+			fscanStr(fp, "*MATERIAL_NAME"); fscanOneQuotation(fp);
+			fscanStr(fp, "*MATERIAL_CLASS"); fscanOneQuotation(fp);
+
+			fscanStr(fp, "*MATERIAL_AMBIENT"); RenVector3D ambient = fscanVector3(fp);
+			fscanStr(fp, "*MATERIAL_DIFFUSE"); RenVector3D diffuse = fscanVector3(fp);
+			fscanStr(fp, "*MATERIAL_SPECULAR"); RenVector3D specular = fscanVector3(fp);
+			fscanStr(fp, "*MATERIAL_SHINE"); float shine = fscanFloat(fp);
+			fscanStr(fp, "*MATERIAL_SHINESTRENGTH"); float shineStrength = fscanFloat(fp);
+			fscanStr(fp, "*MATERIAL_TRANSPARENCY"); fscanFloat(fp);
+			fscanStr(fp, "*MATERIAL_WIRESIZE"); fscanFloat(fp);
+			fscanStr(fp, "*MATERIAL_SHADING"); fscanStr(fp);
+			fscanStr(fp, "*MATERIAL_XP_FALLOFF"); fscanFloat(fp);
+			fscanStr(fp, "*MATERIAL_SELFILLUM"); fscanFloat(fp);
+			fscanStr(fp, "*MATERIAL_FALLOFF"); fscanStr(fp);
+			fscanStr(fp, "*MATERIAL_XP_TYPE"); fscanStr(fp);
+			fscanStr(fp, "*MAP_DIFFUSE"); fscanStr(fp, "{");
+			fscanStr(fp, "*MAP_NAME"); fscanOneQuotation(fp);
+			fscanStr(fp, "*MAP_CLASS"); fscanOneQuotation(fp);
+			fscanStr(fp, "*MAP_SUBNO"); fscanInt(fp);
+			fscanStr(fp, "*MAP_AMOUNT"); fscanFloat(fp);
+			fscanStr(fp, "*BITMAP"); string texFilePathWithQuotation = fscanOneQuotation(fp);
+			string texFilePath = texFilePathWithQuotation.substr(1, (int)texFilePathWithQuotation.size() - 2);
+			string dividerChars;
+			dividerChars.push_back('/');
+			dividerChars.push_back('\\');
+			assert((int)dividerChars.size() == 2);
+			string texFileName = divideStr(texFilePath, dividerChars).back();
+			fscanStr(fp, "*MAP_TYPE"); fscanStr(fp);
+			fscanStr(fp, "*UVW_U_OFFSET"); fscanFloat(fp);
+			fscanStr(fp, "*UVW_V_OFFSET"); fscanFloat(fp);
+			fscanStr(fp, "*UVW_U_TILING"); fscanFloat(fp);
+			fscanStr(fp, "*UVW_V_TILING"); fscanFloat(fp);
+			fscanStr(fp, "*UVW_ANGLE"); fscanFloat(fp);
+			fscanStr(fp, "*UVW_BLUR"); fscanFloat(fp);
+			fscanStr(fp, "*UVW_BLUR_OFFSET"); fscanFloat(fp);
+			fscanStr(fp, "*UVW_NOUSE_AMT"); fscanFloat(fp);
+			fscanStr(fp, "*UVW_NOISE_SIZE"); fscanFloat(fp);
+			fscanStr(fp, "*UVW_NOISE_LEVEL"); fscanInt(fp);
+			fscanStr(fp, "*UVW_NOISE_PHASE"); fscanFloat(fp);
+			fscanStr(fp, "*BITMAP_FILTER"); fscanStr(fp);
+			fscanStr(fp, "}");
+			fscanStr(fp, "}");
+
+			ambientList.push_back(ambient);
+			diffuseList.push_back(diffuse);
+			shineStrengthList.push_back(shineStrength);
+			shineList.push_back(shine);
+			specularList.push_back(specular);
+			texFileNameList.push_back(texFileName);
+
+		}
+		fscanStr(fp, "}");
+
+		fscanStr(fp, "*GEOMOBJECT");
+		fscanStr(fp, "{");
+		fscanStr(fp, "*NODE_NAME"); string nodeName = fscanOneQuotation(fp);
+		fscanStr(fp, "*NODE_TM");
+		fscanStr(fp, "{");
+		fscanStr(fp, "*NODE_NAME"); fscanOneQuotation(fp);
+		fscanStr(fp, "*INHERIT_POS"); fscanVector3(fp);
+		fscanStr(fp, "*INHERIT_ROT"); fscanVector3(fp);
+		fscanStr(fp, "*INHERIT_SCL"); fscanVector3(fp);
+		fscanStr(fp, "*TM_ROW0"); fscanVector3(fp);
+		fscanStr(fp, "*TM_ROW1"); fscanVector3(fp);
+		fscanStr(fp, "*TM_ROW2"); fscanVector3(fp);
+		fscanStr(fp, "*TM_ROW3"); fscanVector3(fp);
+		fscanStr(fp, "*TM_POS"); fscanVector3(fp);
+		fscanStr(fp, "*TM_ROTAXIS"); fscanVector3(fp);
+		fscanStr(fp, "*TM_ROTANGLE"); fscanFloat(fp);
+		fscanStr(fp, "*TM_SCALE"); fscanVector3(fp);
+		fscanStr(fp, "*TM_SCALEAXIS"); fscanVector3(fp);
+		fscanStr(fp, "*TM_SCALEAXISANG"); fscanFloat(fp);
+
+
+		fscanStr(fp, "}");
+		fscanStr(fp, "*MESH");
+		fscanStr(fp, "{");
+		fscanStr(fp, "*TIMEVALUE"); fscanInt(fp);
+		fscanStr(fp, "*MESH_NUMVERTEX"); int vertexCount = fscanInt(fp);
+		fscanStr(fp, "*MESH_NUMFACES"); int faceCount = fscanInt(fp);
+		fscanStr(fp, "*MESH_VERTEX_LIST");
+		fscanStr(fp, "{");
+		for (int vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++) {
+			fscanStr(fp, "*MESH_VERTEX");    int vID = fscanInt(fp);	RenVector3D pos = fscanVector3(fp);
+			assert(vertexIndex == vID);
+			posList.push_back(pos);
+		}
+		fscanStr(fp, "}");
+
+		fscanStr(fp, "*MESH_FACE_LIST");
+		fscanStr(fp, "{");
+		for (int faceIndex = 0; faceIndex < faceCount; faceIndex++) {
+
+			fscanStr(fp, "*MESH_FACE");
+			string faceIDStr = fscanStr(fp);
+			int faceID = strToNumber(faceIDStr.substr(0, (int)faceIDStr.size() - 1));
+			fscanStr(fp, "A:"); int vIDA = fscanInt(fp);
+			fscanStr(fp, "B:"); int vIDB = fscanInt(fp);
+			fscanStr(fp, "C:"); int vIDC = fscanInt(fp);
+			fscanStr(fp, "AB:"); fscanInt(fp);
+			fscanStr(fp, "BC:"); fscanInt(fp);
+			fscanStr(fp, "CA:"); fscanInt(fp);
+			fscanStr(fp, "*MESH_SMOOTHING"); fscanInt(fp);
+			fscanStr(fp, "*MESH_MTLID"); fscanInt(fp);
+
+			RenVector3D face(vIDA, vIDB, vIDC);
+			faceList.push_back(face);
+
+		}
+		fscanStr(fp, "}");
+		fscanStr(fp, "*MESH_NUMTVERTEX"); int tvertexCount = fscanInt(fp);
+		fscanStr(fp, "*MESH_TVERTLIST");
+		fscanStr(fp, "{");
+		for (int tvertexIndex = 0; tvertexIndex < tvertexCount; tvertexIndex++) {
+			fscanStr(fp, "*MESH_TVERT"); int tvertexID = fscanInt(fp);	RenVector3D texCoord = fscanVector3(fp);
+			assert(tvertexIndex == tvertexID);
+			tvertexList.push_back(RenTextureCoor(texCoord.x, texCoord.y));
+		}
+		fscanStr(fp, "}");
+		fscanStr(fp, "*MESH_NUMTVFACES"); int tfaceCount = fscanInt(fp);
+		fscanStr(fp, "*MESH_TFACELIST");
+		fscanStr(fp, "{");
+		for (int tfaceIndex = 0; tfaceIndex < tfaceCount; tfaceIndex++) {
+			fscanStr(fp, "*MESH_TFACE");
+			int tfaceID = fscanInt(fp);
+			assert(tfaceIndex == tfaceID);
+			int tvID0 = fscanInt(fp);
+			int tvID1 = fscanInt(fp);
+			int tvID2 = fscanInt(fp);
+			RenVector3D tface(tvID0, tvID1, tvID2);
+			tfaceList.push_back(tface);
+		}
+		fscanStr(fp, "}");
+		fscanStr(fp, "*MESH_NUMCVERTEX"); int cvertexCount = fscanInt(fp);
+		if (cvertexCount != 0) {
+			//currently we only support cvertexCount==0 !
 			assert(false);
 		}
-		//------------------read file
-		vector<RenVector3D> posList;
-		vector<RenVector3D> faceList;
-		int materialRef = 0;
-		vector<RenTextureCoor> tvertexList;
-		vector<RenVector3D> tfaceList;
+		fscanStr(fp, "*MESH_NORMALS");
+		fscanStr(fp, "{");
+		for (int faceIndex = 0; faceIndex < faceCount; faceIndex++) {
+			fscanStr(fp, "*MESH_FACENORMAL"); int faceID = fscanInt(fp);	RenVector3D faceNorm = fscanVector3(fp);
+			assert(faceIndex == faceID);
+			fscanStr(fp, "*MESH_VERTEXNORMAL"); int vID0 = fscanInt(fp);	RenVector3D norm0 = fscanVector3(fp);
+			fscanStr(fp, "*MESH_VERTEXNORMAL"); int vID1 = fscanInt(fp);	RenVector3D norm1 = fscanVector3(fp);
+			fscanStr(fp, "*MESH_VERTEXNORMAL"); int vID2 = fscanInt(fp);	RenVector3D norm2 = fscanVector3(fp);
+			faceNormList.push_back(faceNorm);
+			faceV0NormList.push_back(norm0);
+			faceV1NormList.push_back(norm1);
+			faceV2NormList.push_back(norm2);
+		}
+		fscanStr(fp, "}");
+		fscanStr(fp, "}");
+		fscanStr(fp, "*PROP_MOTIONBLUR"); fscanInt(fp);
+		fscanStr(fp, "*PROP_CASTSHADOW"); fscanInt(fp);
+		fscanStr(fp, "*PROP_RECVSHADOW"); fscanInt(fp);
+		fscanStr(fp, "*MATERIAL_REF"); materialRef = fscanInt(fp);
+		fscanStr(fp, "}");
 
-		vector<RenVector3D> faceNormList;
-		vector<RenVector3D> faceV0NormList;
-		vector<RenVector3D> faceV1NormList;
-		vector<RenVector3D> faceV2NormList;
+	}
+	//convert data format and fill data to mesh
+	{
+		RenObjectPtr tmpObj = &(renObjectList[numberOfObjects]);
+		//----material and texture
+		const int materialCount = (int)ambientList.size();
 
-		vector<RenVector3D> ambientList;
-		vector<RenVector3D> diffuseList;
-		vector<float> shineStrengthList;
-		vector<float> shineList;
-		vector<RenVector3D> specularList;
+		for (int materialIndex = 0; materialIndex < materialCount; materialIndex++) {
+			tmpObj->materialList[materialIndex].ambient = vector3DTo4D(ambientList[materialIndex]);
+			tmpObj->materialList[materialIndex].diffuse = vector3DTo4D(diffuseList[materialIndex]);
+			tmpObj->materialList[materialIndex].specular = vector3DTo4D(specularList[materialIndex]);
+			tmpObj->materialList[materialIndex].shininess = shineStrengthList[materialIndex] / shineList[materialIndex];
 
-		vector<string> texFileNameList;
-
-		{
-			fscanStr(fp, "*3DSMAX_ASCIIEXPORT");
-			fscanInt(fp);
-			fscanStr(fp, "*COMMENT");
-			fscanOneQuotation(fp);
-			fscanStr(fp, "*SCENE");
-			fscanStr(fp, "{");
-			fscanStr(fp, "*SCENE_FILENAME");
-			fscanOneQuotation(fp);
-			fscanStr(fp, "*SCENE_FIRSTFRAME");
-			fscanInt(fp);
-			fscanStr(fp, "*SCENE_LASTFRAME");
-			fscanInt(fp);
-			fscanStr(fp, "*SCENE_FRAMESPEED");
-			fscanInt(fp);
-			fscanStr(fp, "*SCENE_TICKSPERFRAME");
-			fscanInt(fp);
-			fscanStr(fp, "*SCENE_BACKGROUND_STATIC");
-			fscanVector3(fp);
-			fscanStr(fp, "*SCENE_AMBIENT_STATIC");
-			fscanVector3(fp);
-			fscanStr(fp, "}");
-			fscanStr(fp, "*MATERIAL_LIST");
-			fscanStr(fp, "{");
-			fscanStr(fp, "*MATERIAL_COUNT");
-			int materialCount = fscanInt(fp);
-			for (int materialIndex = 0; materialIndex < materialCount; materialIndex++) {
-				fscanStr(fp, "*MATERIAL");
-				int materialID = fscanInt(fp);
-				assert(materialID == materialIndex);
-				fscanStr(fp, "{");
-				fscanStr(fp, "*MATERIAL_NAME"); fscanOneQuotation(fp);
-				fscanStr(fp, "*MATERIAL_CLASS"); fscanOneQuotation(fp);
-				
-				fscanStr(fp, "*MATERIAL_AMBIENT"); RenVector3D ambient = fscanVector3(fp);
-				fscanStr(fp, "*MATERIAL_DIFFUSE"); RenVector3D diffuse = fscanVector3(fp);
-				fscanStr(fp, "*MATERIAL_SPECULAR"); RenVector3D specular = fscanVector3(fp);
-				fscanStr(fp, "*MATERIAL_SHINE"); float shine = fscanFloat(fp);
-				fscanStr(fp, "*MATERIAL_SHINESTRENGTH"); float shineStrength = fscanFloat(fp);
-				fscanStr(fp, "*MATERIAL_TRANSPARENCY"); fscanFloat(fp);
-				fscanStr(fp, "*MATERIAL_WIRESIZE"); fscanFloat(fp);
-				fscanStr(fp, "*MATERIAL_SHADING"); fscanStr(fp);
-				fscanStr(fp, "*MATERIAL_XP_FALLOFF"); fscanFloat(fp);
-				fscanStr(fp, "*MATERIAL_SELFILLUM"); fscanFloat(fp);
-				fscanStr(fp, "*MATERIAL_FALLOFF"); fscanStr(fp);
-				fscanStr(fp, "*MATERIAL_XP_TYPE"); fscanStr(fp);
-				fscanStr(fp, "*MAP_DIFFUSE"); fscanStr(fp, "{");
-				fscanStr(fp, "*MAP_NAME"); fscanOneQuotation(fp);
-				fscanStr(fp, "*MAP_CLASS"); fscanOneQuotation(fp);
-				fscanStr(fp, "*MAP_SUBNO"); fscanInt(fp);
-				fscanStr(fp, "*MAP_AMOUNT"); fscanFloat(fp);
-				fscanStr(fp, "*BITMAP"); string texFilePathWithQuotation = fscanOneQuotation(fp);
-				string texFilePath = texFilePathWithQuotation.substr(1, (int)texFilePathWithQuotation.size() - 2);
-				string dividerChars;
-				dividerChars.push_back('/');
-				dividerChars.push_back('\\');
-				assert((int)dividerChars.size() == 2);
-				string texFileName = divideStr(texFilePath, dividerChars).back();
-				fscanStr(fp, "*MAP_TYPE"); fscanStr(fp);
-				fscanStr(fp, "*UVW_U_OFFSET"); fscanFloat(fp);
-				fscanStr(fp, "*UVW_V_OFFSET"); fscanFloat(fp);
-				fscanStr(fp, "*UVW_U_TILING"); fscanFloat(fp);
-				fscanStr(fp, "*UVW_V_TILING"); fscanFloat(fp);
-				fscanStr(fp, "*UVW_ANGLE"); fscanFloat(fp);
-				fscanStr(fp, "*UVW_BLUR"); fscanFloat(fp);
-				fscanStr(fp, "*UVW_BLUR_OFFSET"); fscanFloat(fp);
-				fscanStr(fp, "*UVW_NOUSE_AMT"); fscanFloat(fp);
-				fscanStr(fp, "*UVW_NOISE_SIZE"); fscanFloat(fp);
-				fscanStr(fp, "*UVW_NOISE_LEVEL"); fscanInt(fp);
-				fscanStr(fp, "*UVW_NOISE_PHASE"); fscanFloat(fp);
-				fscanStr(fp, "*BITMAP_FILTER"); fscanStr(fp);
-				fscanStr(fp, "}");
-				fscanStr(fp, "}");
-
-				ambientList.push_back(ambient);
-				diffuseList.push_back(diffuse);
-				shineStrengthList.push_back(shineStrength);
-				shineList.push_back(shine);
-				specularList.push_back(specular);
-				texFileNameList.push_back(texFileName);
-
-			}
-			fscanStr(fp, "}");
-
-			fscanStr(fp, "*GEOMOBJECT");
-			fscanStr(fp, "{");
-			fscanStr(fp, "*NODE_NAME"); string nodeName = fscanOneQuotation(fp);
-			fscanStr(fp, "*NODE_TM");
-			fscanStr(fp, "{");
-			fscanStr(fp, "*NODE_NAME"); fscanOneQuotation(fp);
-			fscanStr(fp, "*INHERIT_POS"); fscanVector3(fp);
-			fscanStr(fp, "*INHERIT_ROT"); fscanVector3(fp);
-			fscanStr(fp, "*INHERIT_SCL"); fscanVector3(fp);
-			fscanStr(fp, "*TM_ROW0"); fscanVector3(fp);
-			fscanStr(fp, "*TM_ROW1"); fscanVector3(fp);
-			fscanStr(fp, "*TM_ROW2"); fscanVector3(fp);
-			fscanStr(fp, "*TM_ROW3"); fscanVector3(fp);
-			fscanStr(fp, "*TM_POS"); fscanVector3(fp);
-			fscanStr(fp, "*TM_ROTAXIS"); fscanVector3(fp);
-			fscanStr(fp, "*TM_ROTANGLE"); fscanFloat(fp);
-			fscanStr(fp, "*TM_SCALE"); fscanVector3(fp);
-			fscanStr(fp, "*TM_SCALEAXIS"); fscanVector3(fp);
-			fscanStr(fp, "*TM_SCALEAXISANG"); fscanFloat(fp);
-
-
-			fscanStr(fp, "}");
-			fscanStr(fp, "*MESH");
-			fscanStr(fp, "{");
-			fscanStr(fp, "*TIMEVALUE"); fscanInt(fp);
-			fscanStr(fp, "*MESH_NUMVERTEX"); int vertexCount = fscanInt(fp);
-			fscanStr(fp, "*MESH_NUMFACES"); int faceCount = fscanInt(fp);
-			fscanStr(fp, "*MESH_VERTEX_LIST");
-			fscanStr(fp, "{");
-			for (int vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++) {
-				fscanStr(fp, "*MESH_VERTEX");    int vID = fscanInt(fp);	RenVector3D pos = fscanVector3(fp); 
-				assert(vertexIndex == vID);
-				posList.push_back(pos);
-			}
-			fscanStr(fp, "}");
-
-			fscanStr(fp, "*MESH_FACE_LIST");
-			fscanStr(fp, "{");
-			for (int faceIndex = 0; faceIndex < faceCount; faceIndex++) {
-
-				fscanStr(fp, "*MESH_FACE");
-				string faceIDStr = fscanStr(fp);
-				int faceID = strToNumber(faceIDStr.substr(0, (int)faceIDStr.size() - 1));
-				fscanStr(fp, "A:"); int vIDA = fscanInt(fp);
-				fscanStr(fp, "B:"); int vIDB = fscanInt(fp);
-				fscanStr(fp, "C:"); int vIDC = fscanInt(fp);
-				fscanStr(fp, "AB:"); fscanInt(fp);
-				fscanStr(fp, "BC:"); fscanInt(fp);
-				fscanStr(fp, "CA:"); fscanInt(fp);
-				fscanStr(fp, "*MESH_SMOOTHING"); fscanInt(fp);
-				fscanStr(fp, "*MESH_MTLID"); fscanInt(fp);
-
-				RenVector3D face(vIDA, vIDB, vIDC);
-				faceList.push_back(face);
-
-			}
-			fscanStr(fp, "}");
-			fscanStr(fp, "*MESH_NUMTVERTEX"); int tvertexCount = fscanInt(fp);
-			fscanStr(fp, "*MESH_TVERTLIST");
-			fscanStr(fp, "{");
-			for (int tvertexIndex = 0; tvertexIndex < tvertexCount; tvertexIndex++) {
-				fscanStr(fp, "*MESH_TVERT"); int tvertexID = fscanInt(fp);	RenVector3D texCoord = fscanVector3(fp);
-				assert(tvertexIndex == tvertexID);
-				tvertexList.push_back(RenTextureCoor(texCoord.x, texCoord.y));
-			}
-			fscanStr(fp, "}");
-			fscanStr(fp, "*MESH_NUMTVFACES"); int tfaceCount = fscanInt(fp);
-			fscanStr(fp, "*MESH_TFACELIST");
-			fscanStr(fp, "{");
-			for (int tfaceIndex = 0; tfaceIndex < tfaceCount; tfaceIndex++) {
-				fscanStr(fp, "*MESH_TFACE");
-				int tfaceID = fscanInt(fp);
-				assert(tfaceIndex == tfaceID);
-				int tvID0 = fscanInt(fp);
-				int tvID1 = fscanInt(fp);
-				int tvID2 = fscanInt(fp);
-				RenVector3D tface(tvID0, tvID1, tvID2);
-				tfaceList.push_back(tface);
-			}
-			fscanStr(fp, "}");
-			fscanStr(fp, "*MESH_NUMCVERTEX"); int cvertexCount = fscanInt(fp);
-			if (cvertexCount != 0) {
-				//currently we only support cvertexCount==0 !
-				assert(false);
-			}
-			fscanStr(fp, "*MESH_NORMALS");
-			fscanStr(fp, "{");
-			for (int faceIndex = 0; faceIndex < faceCount; faceIndex++) {
-				fscanStr(fp, "*MESH_FACENORMAL"); int faceID = fscanInt(fp);	RenVector3D faceNorm = fscanVector3(fp);	
-				assert(faceIndex == faceID);
-				fscanStr(fp, "*MESH_VERTEXNORMAL"); int vID0 = fscanInt(fp);	RenVector3D norm0 = fscanVector3(fp);  
-				fscanStr(fp, "*MESH_VERTEXNORMAL"); int vID1 = fscanInt(fp);	RenVector3D norm1 = fscanVector3(fp);  
-				fscanStr(fp, "*MESH_VERTEXNORMAL"); int vID2 = fscanInt(fp);	RenVector3D norm2 = fscanVector3(fp);  
-				faceNormList.push_back(faceNorm);
-				faceV0NormList.push_back(norm0);
-				faceV1NormList.push_back(norm1);
-				faceV2NormList.push_back(norm2);
-			}
-			fscanStr(fp, "}");
-			fscanStr(fp, "}");
-			fscanStr(fp, "*PROP_MOTIONBLUR"); fscanInt(fp);
-			fscanStr(fp, "*PROP_CASTSHADOW"); fscanInt(fp);
-			fscanStr(fp, "*PROP_RECVSHADOW"); fscanInt(fp);
-			fscanStr(fp, "*MATERIAL_REF"); materialRef = fscanInt(fp);
-			fscanStr(fp, "}");
+			string texFilePath = folderPath + "/" + texFileNameList[materialIndex];
+			bool initTexSucc = tmpObj->textureList[materialIndex].bmp.readBMP(texFilePath.c_str());
+			assert(initTexSucc);
+			tmpObj->numberOfMaterials++;
+			numberOfTextures++;
 
 		}
-		//convert data format and fill data to mesh
+
+		//----convert mesh
+
+		int pointCnt = (int)posList.size();
+		renObjectList[numberOfObjects].numberOfPoints = pointCnt;
+		for (int posIndex = 0; posIndex < pointCnt; posIndex++)
 		{
-			RenObjectPtr tmpObj = &(renObjectList[numberOfObjects]);
-			//----material and texture
-			const int materialCount = (int)ambientList.size();
-			
-			for (int materialIndex = 0; materialIndex < materialCount; materialIndex++) {
-				tmpObj->materialList[materialIndex].ambient = vector3DTo4D(ambientList[materialIndex]);
-				tmpObj->materialList[materialIndex].diffuse = vector3DTo4D(diffuseList[materialIndex]);
-				tmpObj->materialList[materialIndex].specular = vector3DTo4D(specularList[materialIndex]);
-				tmpObj->materialList[materialIndex].shininess = shineStrengthList[materialIndex] / shineList[materialIndex];
+			tmpObj->pointList[posIndex].x = posList[posIndex].x;
+			tmpObj->pointList[posIndex].y = posList[posIndex].y;
+			tmpObj->pointList[posIndex].z = posList[posIndex].z;
+			tmpObj->pointList[posIndex].w = 1;
 
-				string texFilePath = folderPath + "/" + texFileNameList[materialIndex];
-				bool initTexSucc = tmpObj->textureList[materialIndex].bmp.readBMP(texFilePath.c_str());
-				assert(initTexSucc);
-				tmpObj->numberOfMaterials++;
-				numberOfTextures++;
-
-			}
-
-			//----convert mesh
-			
-			int pointCnt = (int)posList.size();
-			renObjectList[numberOfObjects].numberOfPoints = pointCnt;
-			for (int posIndex = 0; posIndex < pointCnt; posIndex++)
-			{
-				tmpObj->pointList[posIndex].x = posList[posIndex].x;
-				tmpObj->pointList[posIndex].y = posList[posIndex].y;
-				tmpObj->pointList[posIndex].z = posList[posIndex].z;
-				tmpObj->pointList[posIndex].w = 1;
-
-				tmpObj->transferredPointList[posIndex].x = posList[posIndex].x;
-				tmpObj->transferredPointList[posIndex].y = posList[posIndex].y;
-				tmpObj->transferredPointList[posIndex].z = posList[posIndex].z;
-				tmpObj->transferredPointList[posIndex].w = 1;
-			}
-			int faceCnt = (int)faceList.size();
-			renObjectList[numberOfObjects].numberOfTriangles = faceCnt;
-			
-			RenVector3D tmpV;
-			RenVector3D v0N, v1N, v2N;
-			for (int faceIndex = 0; faceIndex < faceCnt; faceIndex++)
-			{
-				tmpV = faceList[faceIndex];
-				tmpObj->triangleList[faceIndex].pointIndex.SetValue(tmpV);
-				
-				tmpV = tfaceList[faceIndex];
-				tmpObj->triangleList[faceIndex].texIndex.SetValue(tmpV);
-				
-				tmpV = faceNormList[faceIndex];
-				tmpObj->triangleList[faceIndex].normal.SetValue(tmpV);
-				tmpObj->triangleList[faceIndex].originalNormal.SetValue(tmpV);
-
-				v0N = faceV0NormList[faceIndex];
-				v1N = faceV1NormList[faceIndex];
-				v2N = faceV2NormList[faceIndex];
-				tmpObj->triangleList[faceIndex].pointNormal[0].SetValue(v0N);
-				tmpObj->triangleList[faceIndex].pointNormal[1].SetValue(v1N);
-				tmpObj->triangleList[faceIndex].pointNormal[2].SetValue(v2N);
-
-				tmpObj->triangleList[faceIndex].pointListPtr = tmpObj->pointList;
-			}
-			int textureCoorCnt = (int)tvertexList.size();
-			for (int tIndex = 0; tIndex < textureCoorCnt; tIndex++)
-			{
-				renObjectList[numberOfObjects].textureCoorList[tIndex].u = tvertexList[tIndex].u;
-				renObjectList[numberOfObjects].textureCoorList[tIndex].v = tvertexList[tIndex].v;
-			}
-			numberOfObjects++;
-			numberOfPrimitives += tmpObj->numberOfTriangles;
+			tmpObj->transferredPointList[posIndex].x = posList[posIndex].x;
+			tmpObj->transferredPointList[posIndex].y = posList[posIndex].y;
+			tmpObj->transferredPointList[posIndex].z = posList[posIndex].z;
+			tmpObj->transferredPointList[posIndex].w = 1;
 		}
-		
-		//--------------------------close file
-		fclose(fp);
-	
+		int faceCnt = (int)faceList.size();
+		renObjectList[numberOfObjects].numberOfTriangles = faceCnt;
+
+		RenVector3D tmpV;
+		RenVector3D v0N, v1N, v2N;
+		for (int faceIndex = 0; faceIndex < faceCnt; faceIndex++)
+		{
+			tmpV = faceList[faceIndex];
+			tmpObj->triangleList[faceIndex].pointIndex.SetValue(tmpV);
+
+			tmpV = tfaceList[faceIndex];
+			tmpObj->triangleList[faceIndex].texIndex.SetValue(tmpV);
+
+			tmpV = faceNormList[faceIndex];
+			tmpObj->triangleList[faceIndex].normal.SetValue(tmpV);
+			tmpObj->triangleList[faceIndex].originalNormal.SetValue(tmpV);
+
+			v0N = faceV0NormList[faceIndex];
+			v1N = faceV1NormList[faceIndex];
+			v2N = faceV2NormList[faceIndex];
+			tmpObj->triangleList[faceIndex].pointNormal[0].SetValue(v0N);
+			tmpObj->triangleList[faceIndex].pointNormal[1].SetValue(v1N);
+			tmpObj->triangleList[faceIndex].pointNormal[2].SetValue(v2N);
+
+			tmpObj->triangleList[faceIndex].pointListPtr = tmpObj->pointList;
+		}
+		int textureCoorCnt = (int)tvertexList.size();
+		for (int tIndex = 0; tIndex < textureCoorCnt; tIndex++)
+		{
+			renObjectList[numberOfObjects].textureCoorList[tIndex].u = tvertexList[tIndex].u;
+			renObjectList[numberOfObjects].textureCoorList[tIndex].v = tvertexList[tIndex].v;
+		}
+		numberOfObjects++;
+		numberOfPrimitives += tmpObj->numberOfTriangles;
+	}
+
+	//--------------------------close file
+	fclose(fp);
+
 }
 
 void RenEngine::ReadKeyInput()
@@ -472,7 +503,7 @@ void RenEngine::ReadKeyInput()
 	//update camera
 	// if left --> camera.location.x -= 5;
 	//etc.
-	
+
 }
 
 void RenEngine::Rasterization()
@@ -491,55 +522,34 @@ void RenEngine::Rasterization()
 	}
 }
 
-void RenEngine::DrawPrimitive (RenPrimitive &pri)
+void RenEngine::DrawPrimitive(RenPrimitive& pri)
 {
-	RenVertex4D v1 = pri.v[0];
-	RenVertex4D v2 = pri.v[1];
-	RenVertex4D v3 = pri.v[2];
-	
-	if (renObjectList[pri.objetcIndex].renderingMode == RENDERING_MODE_WIREFRAME)
-	{
-		RenColor tmpColor(255, 255, 255, 1);
-		DrawLine(v1.p.x, v1.p.y, v2.p.x, v2.p.y, tmpColor);
-		DrawLine(v1.p.x, v1.p.y, v3.p.x, v3.p.y, tmpColor);
-		DrawLine(v2.p.x, v2.p.y, v3.p.x, v3.p.y, tmpColor);
-	}
-	
-	else if (renObjectList[pri.objetcIndex].renderingMode == RENDERING_MODE_TEXTURE)
-	{
-		if (v1.p.y > v2.p.y)
-			SwapVertex4D(&v1, &v2);
-		if (v1.p.y > v3.p.y)
-			SwapVertex4D(&v1, &v3);
-		if (v2.p.y > v3.p.y)
-			SwapVertex4D(&v2, &v3);
-		
-		if (v1.p.y == v2.p.y) 
-			DrawPrimitiveFlatTop(v1.p,v2.p,v3.p,v1.t,v2.t,v3.t, pri.objetcIndex, pri.angNormalDiffuseLight);
-		else if (v2.p.y == v3.p.y)
-			DrawPrimitiveFlatButton(v1.p, v2.p, v3.p, v1.t, v2.t, v3.t, pri.objetcIndex,pri.angNormalDiffuseLight);
-		else
-		{
-			//draw general triangle
-			float xMid = v1.p.x + (v3.p.x - v1.p.x)*(v2.p.y - v1.p.y)/(v3.p.y - v1.p.y);
-			float zMid = v1.p.z + (v3.p.z - v1.p.z) * (v2.p.y - v1.p.y) / (v3.p.y - v1.p.y);
-			float uMid = v1.t.u + (v3.t.u - v1.t.u)*(v2.p.y - v1.p.y) / (v3.p.y - v1.p.y);
-			float vMid = v1.t.v + (v3.t.v - v1.t.v)*(v2.p.y - v1.p.y)/(v3.p.y - v1.p.y);
-			//TODO: z buffer
-			RenPoint4D pMid(xMid, v2.p.y, zMid, 1); 
-			RenTextureCoor tMid(uMid, vMid);
-			DrawPrimitiveFlatButton(v1.p, v2.p, pMid, v1.t, v2.t, tMid, pri.objetcIndex, pri.angNormalDiffuseLight);
-			DrawPrimitiveFlatTop(pMid, v2.p, v3.p, tMid, v2.t, v3.t, pri.objetcIndex, pri.angNormalDiffuseLight);
-		}
-	}
-		
+    RenVertex4D v1 = pri.v[0];
+    RenVertex4D v2 = pri.v[1];
+    RenVertex4D v3 = pri.v[2];
+
+    if (renObjectList[pri.objetcIndex].renderingMode == RENDERING_MODE_WIREFRAME)
+    {
+        RenColor color(255, 255, 255, 1);
+        DrawLine(v1.p.x, v1.p.y, v2.p.x, v2.p.y, color);
+        DrawLine(v1.p.x, v1.p.y, v3.p.x, v3.p.y, color);
+        DrawLine(v2.p.x, v2.p.y, v3.p.x, v3.p.y, color);
+    }
+    else if (renObjectList[pri.objetcIndex].renderingMode == RENDERING_MODE_TEXTURE)
+    {
+        // Unified barycentric rasterizer: no triangle splitting required.
+        DrawPrimitiveFlatTop(v1.p, v2.p, v3.p,
+            v1.t, v2.t, v3.t,
+            pri.objetcIndex, pri.angNormalDiffuseLight, pri.specularLight,
+            v1.diffuse, v2.diffuse, v3.diffuse, v1.specular, v2.specular, v3.specular);
+    }
 }
 
-void RenEngine::DrawLine (float x1, float y1, float x2, float y2, RenColor renColor)
+void RenEngine::DrawLine(float x1, float y1, float x2, float y2, RenColor renColor)
 {
 	COLORREF color = RenColorToCOLORREF(renColor);
 	//COLORREF color = RGB(0, 255, 0);
-	if ((abs(x2-x1))<(abs(y2-y1)))
+	if ((abs(x2 - x1)) < (abs(y2 - y1)))
 	{
 		if (y2 < y1)
 		{
@@ -548,9 +558,9 @@ void RenEngine::DrawLine (float x1, float y1, float x2, float y2, RenColor renCo
 			SWAP(y1, y2, tmp);
 		}
 		float dx = (x2 - x1) / (y2 - y1);
-		float ix = ceil(x1) - dx*(y1 - ceil(y1));
-		
-		for (int iy = ceil(y1); iy <= (ceil(y2)-1); iy++)
+		float ix = ceil(x1) - dx * (y1 - ceil(y1));
+
+		for (int iy = ceil(y1); iy <= (ceil(y2) - 1); iy++)
 		{
 			SetPixel(hdc, ceil(ix), iy, color);
 			ix += dx;
@@ -565,156 +575,146 @@ void RenEngine::DrawLine (float x1, float y1, float x2, float y2, RenColor renCo
 			SWAP(y1, y2, tmp);
 		}
 		float dy = (y2 - y1) / (x2 - x1);
-		float iy = ceil(y1) - dy*(y1 - ceil(y1));
+		float iy = ceil(y1) - dy * (y1 - ceil(y1));
 
-		for (int ix = ceil(x1); ix <= ceil(x2)-1; ix ++)
+		for (int ix = ceil(x1); ix <= ceil(x2) - 1; ix++)
 		{
 			SetPixel(hdc, ix, ceil(iy), color);
 			iy += dy;
 		}
 	}
 }
-void RenEngine::DrawPrimitiveFlatTop(RenPoint4D& p1, RenPoint4D& p2, RenPoint4D& p3, RenTextureCoor& t1, RenTextureCoor& t2, RenTextureCoor& t3, int objIndex, float diffuseLightAng)
+void RenEngine::DrawPrimitiveFlatTop(RenPoint4D& p1, RenPoint4D& p2, RenPoint4D& p3, RenTextureCoor& t1, RenTextureCoor& t2, RenTextureCoor& t3, int objIndex, float diffuseLightAng, float specularLight, float d1, float d2, float d3, float s1, float s2, float s3)
 {
-	if (p1.x > p2.x)
-	{
-		RenPoint4D tmpP;
-		SWAP(p1, p2, tmpP);
-		RenTextureCoor tmpT;
-		SWAP(t1, t2, tmpT);
-	}
+    // Rasterize the whole triangle at pixel centers, using a consistent
+    // top-left edge rule. This avoids cracks and overlapping edge pixels.
+    // Existing Gouraud diffuse lighting and texture mapping are preserved.
+    (void)diffuseLightAng;
+    (void)specularLight; // Using interpolated per-vertex specular instead.
 
-	float dy = p3.y - p1.y;
-	float xStart = p1.x;
-	float xEnd = p2.x;
-	float yStart = p1.y;
-	float yEnd = p3.y;
-	float dxdyl = (p3.x - p1.x) / dy;
-	float dxdyr = (p3.x - p2.x) / dy;
+    if (w <= 0 || h <= 0)
+        return;
 
-	float iz;
-	float iu, iv;
-	float c[3];
-	bool zBufferValidation = true;
-	RenColor baseColor, tmpColor;
-	int bmpW = renObjectList[objIndex].textureList[0].bmp.width;
-	int bmpH = renObjectList[objIndex].textureList[0].bmp.height;
-	for (float iy = yStart; iy < yEnd; iy++)
-	{
-		for (float ix = xStart; ix < xEnd; ix++)
-		{
-			Interpolate(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y, ix, iy, c);
-			iz = c[0] * p1.z + c[1] * p2.z + c[2] * p3.z;
-			if (renderingMode & RENDERING_MODE_ENABLE_ZBUFFER)
-			{
-				zBufferValidation = (iz < zBuffer[w * (int)ceil(iy) + (int)ceil(ix)]) ? true : false;
-			}
-			if (zBufferValidation == true)
-			{
-				iu = c[0] * t1.u + c[1] * t2.u + c[2] * t3.u;
-				iv = c[0] * t1.v + c[1] * t2.v + c[2] * t3.v;
-				zBuffer[w * (int)ceil(iy) + (int)ceil(ix)] = iz;
-				baseColor = renObjectList[objIndex].textureList[0].bmp.getPixelColor(iu * bmpW, iv * bmpH);
+    if (!std::isfinite(p1.x) || !std::isfinite(p1.y) ||
+        !std::isfinite(p2.x) || !std::isfinite(p2.y) ||
+        !std::isfinite(p3.x) || !std::isfinite(p3.y))
+        return;
 
-				//lighting start
-				// ambient light
-				tmpColor.blue = baseColor.blue * renObjectList[objIndex].materialList[0].ambient.x;
-				tmpColor.green = baseColor.green * renObjectList[objIndex].materialList[0].ambient.y;
-				tmpColor.red = baseColor.red * renObjectList[objIndex].materialList[0].ambient.z;
+    // Normalize winding so the three edge functions are positive inside.
+    auto edge = [](double ax, double ay, double bx, double by,
+                   double px, double py) -> double
+    {
+        return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+    };
 
-				//diffuse light
-				if (diffuseLightAng > 0)
-				{
-					tmpColor.blue += baseColor.blue * renObjectList[objIndex].materialList[0].diffuse.x * diffuseLightAng;
-					tmpColor.green += baseColor.green * renObjectList[objIndex].materialList[0].diffuse.y * diffuseLightAng;
-					tmpColor.red += baseColor.red * renObjectList[objIndex].materialList[0].diffuse.z * diffuseLightAng;
-				}
+    double area = edge(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
+    if (!std::isfinite(area) || std::abs(area) < 1e-10)
+        return;
 
-				if (tmpColor.blue > 0xFF)  tmpColor.blue = 0xFF;
-				if (tmpColor.green > 0xFF) tmpColor.green = 0xFF;
-				if (tmpColor.red > 0xFF) tmpColor.red = 0xFF;
+    if (area < 0.0)
+    {
+        std::swap(p2, p3);
+        std::swap(t2, t3);
+        std::swap(d2, d3);
+        std::swap(s2, s3);
+        area = -area;
+    }
 
-				//lighting end
-				COLORREF color = RenColorToCOLORREF(tmpColor);
-				SetPixel(hdc, (int)ceil(ix), (int)ceil(iy), color);
+    // In screen coordinates Y goes down. Include top/left edges only.
+    auto topLeft = [](const RenPoint4D& a, const RenPoint4D& b) -> bool
+    {
+        const float dy = b.y - a.y;
+        const float dx = b.x - a.x;
+        return dy < 0.0f || (dy == 0.0f && dx > 0.0f);
+    };
 
-			}
-		}
-		xStart += dxdyl;
-		xEnd += dxdyr;
-	}
-	
+    const bool e0TopLeft = topLeft(p2, p3);
+    const bool e1TopLeft = topLeft(p3, p1);
+    const bool e2TopLeft = topLeft(p1, p2);
+
+    const double minX = (std::min)({double(p1.x), double(p2.x), double(p3.x)});
+    const double maxX = (std::max)({double(p1.x), double(p2.x), double(p3.x)});
+    const double minY = (std::min)({double(p1.y), double(p2.y), double(p3.y)});
+    const double maxY = (std::max)({double(p1.y), double(p2.y), double(p3.y)});
+
+    // Clamp before converting to int; avoids overflow for off-screen geometry.
+    const int x0 = static_cast<int>((std::max)(0.0, std::ceil(minX - 0.5)));
+    const int x1 = static_cast<int>((std::min)(double(w - 1), std::floor(maxX - 0.5)));
+    const int y0 = static_cast<int>((std::max)(0.0, std::ceil(minY - 0.5)));
+    const int y1 = static_cast<int>((std::min)(double(h - 1), std::floor(maxY - 0.5)));
+    if (x0 > x1 || y0 > y1)
+        return;
+
+    auto& bmp = renObjectList[objIndex].textureList[0].bmp;
+    if (bmp.width <= 0 || bmp.height <= 0)
+        return;
+    const RenMaterial& mat = renObjectList[objIndex].materialList[0];
+    const bool useDepth = (renderingMode & RENDERING_MODE_ENABLE_ZBUFFER) != 0;
+
+    for (int py = y0; py <= y1; ++py)
+    {
+        for (int px = x0; px <= x1; ++px)
+        {
+            const double sx = double(px) + 0.5;
+            const double sy = double(py) + 0.5;
+            const double e0 = edge(p2.x, p2.y, p3.x, p3.y, sx, sy);
+            const double e1 = edge(p3.x, p3.y, p1.x, p1.y, sx, sy);
+            const double e2 = edge(p1.x, p1.y, p2.x, p2.y, sx, sy);
+
+            if (e0 < 0.0 || (e0 == 0.0 && !e0TopLeft) ||
+                e1 < 0.0 || (e1 == 0.0 && !e1TopLeft) ||
+                e2 < 0.0 || (e2 == 0.0 && !e2TopLeft))
+                continue;
+
+            const float c0 = float(e0 / area);
+            const float c1 = float(e1 / area);
+            const float c2 = float(e2 / area);
+
+            const float depth = c0 * p1.z + c1 * p2.z + c2 * p3.z;
+            if (!std::isfinite(depth))
+                continue;
+            const int index = py * w + px;
+            if (useDepth && depth >= zBuffer[index])
+                continue;
+
+            const float uInterp = c0 * t1.u + c1 * t2.u + c2 * t3.u;
+            const float vInterp = c0 * t1.v + c1 * t2.v + c2 * t3.v;
+            if (!std::isfinite(uInterp) || !std::isfinite(vInterp))
+                continue;
+            const float u = uInterp - std::floor(uInterp);
+            const float v = vInterp - std::floor(vInterp);
+            const int texX = (std::min)(bmp.width - 1, int(u * bmp.width));
+            const int texY = (std::min)(bmp.height - 1, int(v * bmp.height));
+            const RenColor base = bmp.getPixelColor(texX, texY);
+
+            const float diffuse = std::clamp(c0*d1 + c1*d2 + c2*d3, 0.0f, 1.0f);
+            const float specular = std::clamp(c0*s1 + c1*s2 + c2*s3, 0.0f, 1.0f);
+            // Specular light is additive; it is not multiplied by the texture.
+            const float r = base.red * (mat.ambient.x + mat.diffuse.x * diffuse)
+                + 255.0f * mat.specular.x * specular;
+            const float g = base.green * (mat.ambient.y + mat.diffuse.y * diffuse)
+                + 255.0f * mat.specular.y * specular;
+            const float b = base.blue * (mat.ambient.z + mat.diffuse.z * diffuse)
+                + 255.0f * mat.specular.z * specular;
+            RenColor result;
+            result.red = static_cast<unsigned char>(std::clamp(r, 0.0f, 255.0f));
+            result.green = static_cast<unsigned char>(std::clamp(g, 0.0f, 255.0f));
+            result.blue = static_cast<unsigned char>(std::clamp(b, 0.0f, 255.0f));
+
+            if (useDepth)
+                zBuffer[index] = depth;
+            SetPixel(hdc, px, py, RenColorToCOLORREF(result));
+        }
+    }
 }
-void RenEngine::DrawPrimitiveFlatButton(RenPoint4D& p1, RenPoint4D& p2, RenPoint4D& p3, RenTextureCoor& t1, RenTextureCoor& t2, RenTextureCoor& t3, int objIndex, float diffuseLightAng)
+
+void RenEngine::DrawPrimitiveFlatButton(RenPoint4D& p1, RenPoint4D& p2, RenPoint4D& p3, RenTextureCoor& t1, RenTextureCoor& t2, RenTextureCoor& t3, int objIndex, float diffuseLightAng, float specularLight, float d1, float d2, float d3, float s1, float s2, float s3)
 {
-	if (p2.x > p3.x)
-	{
-		RenPoint4D tmpP;
-		SWAP(p2, p3, tmpP);
-		RenTextureCoor tmpT;
-		SWAP(t2, t3, tmpT);
-	}
-	float dy = p3.y - p1.y;
-	float xStart = p1.x;
-	float xEnd = p1.x;
-	float yStart = p1.y;
-	float yEnd = p3.y;
-	float dxdyl = (p2.x - p1.x) / dy;
-	float dxdyr = (p3.x - p1.x) / dy;
-	float iz;
-	float iu, iv;
-	float c[3];
-	RenColor baseColor, tmpColor;
-	int bmpW = renObjectList[objIndex].textureList[0].bmp.width;
-	int bmpH = renObjectList[objIndex].textureList[0].bmp.height;
-	bool zBufferValidation = true;
-	for (float iy = yStart; iy < yEnd; iy++)
-	{
-		for (float ix = xStart; ix < xEnd; ix++)
-		{
-			Interpolate(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y, ix, iy, c);
-			iz = c[0] * p1.z + c[1] * p2.z + c[2] * p3.z;
-			if (renderingMode & RENDERING_MODE_ENABLE_ZBUFFER)
-			{
-				zBufferValidation = (iz < zBuffer[w * (int)ceil(iy) + (int)ceil(ix)]) ? true : false;
-			}
-			if (zBufferValidation == true)
-			{
-				iu = c[0] * t1.u + c[1] * t2.u + c[2] * t3.u;
-				iv = c[0] * t1.v + c[1] * t2.v + c[2] * t3.v;
-				zBuffer[w * (int)ceil(iy) + (int)ceil(ix)] = iz;
-				baseColor = renObjectList[objIndex].textureList[0].bmp.getPixelColor(iu * bmpW, iv * bmpH); // to be verified
-				
-				//lighting start
-				// ambient light
-				tmpColor.blue = baseColor.blue * renObjectList[objIndex].materialList[0].ambient.x;
-				tmpColor.green = baseColor.green * renObjectList[objIndex].materialList[0].ambient.y;
-				tmpColor.red = baseColor.red * renObjectList[objIndex].materialList[0].ambient.z;
-
-				//diffuse light
-				if (diffuseLightAng > 0)
-				{
-					
-					tmpColor.blue += baseColor.blue * renObjectList[objIndex].materialList[0].diffuse.x * diffuseLightAng;
-					tmpColor.green += baseColor.green * renObjectList[objIndex].materialList[0].diffuse.y * diffuseLightAng;
-					tmpColor.red += baseColor.red * renObjectList[objIndex].materialList[0].diffuse.z * diffuseLightAng;
-				
-				}
-
-				if (tmpColor.blue > 0xFF)  tmpColor.blue = 0xFF;
-				if (tmpColor.green > 0xFF) tmpColor.green = 0xFF;
-				if (tmpColor.red > 0xFF) tmpColor.red = 0xFF;
-				//lighting end
-				
-				COLORREF color = RenColorToCOLORREF(tmpColor);
-				SetPixel(hdc, (int)ceil(ix), (int)ceil(iy), color);
-			}
-
-		}
-		xStart += dxdyl;
-		xEnd += dxdyr;
-	}
+    // Compatibility wrapper; both triangle shapes use the same rasterizer.
+    DrawPrimitiveFlatTop(p1, p2, p3, t1, t2, t3,
+        objIndex, diffuseLightAng, specularLight, d1, d2, d3, s1, s2, s3);
 }
+
 void RenEngine::ResetZBuffer()
 {
 	if (zBuffer == NULL) return;
@@ -725,41 +725,52 @@ void RenEngine::ResetZBuffer()
 }
 //RenColor BitMapFindColor (BitMap *map, float x, float y)
 //{
-	
+
 //}
 void RenEngine::LocalTransformation(RenVector3D worldPos, float radX, float radY, float radZ, float scale, int objIndex)
 {
 	//for (int i = 0; i < numberOfObjects; i++)
 	//{
-		RenObjectPtr tmpObject = &(renObjectList[objIndex]);
-		for (int j = 0; j < tmpObject->numberOfPoints; j++)
-		{
-			RotateAroundXAxis(tmpObject->pointList[j], radX);
-			RotateAroundYAxis(tmpObject->pointList[j], radY);
-			RotateAroundZAxis(tmpObject->pointList[j], radZ);
+	RenObjectPtr tmpObject = &(renObjectList[objIndex]);
+	for (int j = 0; j < tmpObject->numberOfPoints; j++)
+	{
+		RotateAroundXAxis(tmpObject->pointList[j], radX);
+		RotateAroundYAxis(tmpObject->pointList[j], radY);
+		RotateAroundZAxis(tmpObject->pointList[j], radZ);
 
-			tmpObject->pointList[j].x += worldPos.x;
-			tmpObject->pointList[j].y += worldPos.y;
-			tmpObject->pointList[j].z += worldPos.z;
+		tmpObject->pointList[j].x += worldPos.x;
+		tmpObject->pointList[j].y += worldPos.y;
+		tmpObject->pointList[j].z += worldPos.z;
 
-			tmpObject->pointList[j].x *= scale;
-			tmpObject->pointList[j].y *= scale;
-			tmpObject->pointList[j].z *= scale;
-		}
-		for (int k = 0; k < tmpObject->numberOfTriangles; k++)
+		tmpObject->pointList[j].x *= scale;
+		tmpObject->pointList[j].y *= scale;
+		tmpObject->pointList[j].z *= scale;
+	}
+	for (int k = 0; k < tmpObject->numberOfTriangles; k++)
+	{
+		RenTriangle& tri = tmpObject->triangleList[k];
+
+		// Rotate face normal
+		RotateAroundXAxis(tri.normal, radX);
+		RotateAroundYAxis(tri.normal, radY);
+		RotateAroundZAxis(tri.normal, radZ);
+
+		// Rotate vertex normals
+		for (int i = 0; i < 3; i++)
 		{
-			RotateAroundXAxis(tmpObject->triangleList[k].normal, radX);
-			RotateAroundYAxis(tmpObject->triangleList[k].normal, radY);
-			RotateAroundZAxis(tmpObject->triangleList[k].normal, radZ);
+			RotateAroundXAxis(tri.pointNormal[i], radX);
+			RotateAroundYAxis(tri.pointNormal[i], radY);
+			RotateAroundZAxis(tri.pointNormal[i], radZ);
 		}
+	}
 	//}
 }
 void RenEngine::LocalToWorldTransformation(RenVector4D& worldPos)
 {
-	for (int i = 0; i < numberOfObjects; i ++)
+	for (int i = 0; i < numberOfObjects; i++)
 	{
 		RenObjectPtr tmpObject = &(renObjectList[i]);
-		for (int j = 0; j < tmpObject->numberOfPoints; j ++)
+		for (int j = 0; j < tmpObject->numberOfPoints; j++)
 		{
 			// local to world
 			tmpObject->transferredPointList[j].x = tmpObject->pointList[j].x + worldPos.x;
@@ -774,7 +785,7 @@ void RenEngine::WorldToCameraTransformation()
 	for (int i = 0; i < numberOfObjects; i++)
 	{
 		RenObjectPtr tmpObj = &(renObjectList[i]);
-		
+
 		//TODO: lighting
 		// world to camera
 		for (int j = 0; j < tmpObj->numberOfPoints; j++)
@@ -805,14 +816,23 @@ void RenEngine::IsObjectOutOfBoundary()
 
 void RenEngine::ProjectionToViewPortTransformation()
 {
+	const float aspect =
+		static_cast<float>(w) / static_cast<float>(h);
 	for (int i = 0; i < numberOfPrimitives; i++)
 	{
 		RenPrimitivePtr tmpPri = &(renRenderingList[i]);
 		for (int j = 0; j < 3; j++)
 		{
-			tmpPri->v[j].p.x = (tmpPri->v[j].p.x) * (w - 1) / (2 * renCamera.zn) + (w - 1) / 2;
-			tmpPri->v[j].p.y = (tmpPri->v[j].p.y * (w/h)) * (1 - h) / (2 * renCamera.zn) + (h - 1) / 2;
-		}								
+
+			tmpPri->v[j].p.x =
+				tmpPri->v[j].p.x *
+				(w - 1.0f) / (2.0f * renCamera.zn) +
+				(w - 1.0f) / 2.0f;
+			tmpPri->v[j].p.y =
+				(tmpPri->v[j].p.y * aspect) *
+				(1.0f - h) / (2.0f * renCamera.zn) +
+				(h - 1.0f) / 2.0f;
+		}
 	}
 }
 
@@ -851,28 +871,142 @@ void RenEngine::BackFaceDetection()
 
 void RenEngine::Lighting()
 {
-	int difIndex = 0;
+	int difIndex = -1;
 	for (int i = 0; i < numberOfLights; i++)
 	{
 		if (renLight[i].att == RENLIGHT_ATT_DIRECTIONAL)
+		{
 			difIndex = i;
+			break;
+		}
 	}
-	RenObjectPtr tmpObj = NULL;
-	RenVector3D inverseNormal;
+
+	if (-1 == difIndex)
+		return;
+
+	// Directional light, direction of incoming rays
+	RenVector3D L = vector4DTo3D(renLight[difIndex].direction);
+	L.x = -L.x;
+	L.y = -L.y;
+	L.z = -L.z;
+
+	Vector3DNormalize(&L);
+
 	for (int i = 0; i < numberOfObjects; i++)
 	{
-		tmpObj = &renObjectList[i];
+		RenObjectPtr tmpObj = &renObjectList[i];
 		for (int j = 0; j < tmpObj->numberOfTriangles; j++)
 		{
-			inverseNormal.x = -tmpObj->triangleList[j].normal.x;
-			inverseNormal.y = -tmpObj->triangleList[j].normal.y;
-			inverseNormal.z = -tmpObj->triangleList[j].normal.z;
-			float tmp = CalculateDotProduct3D(vector4DTo3D(renLight[difIndex].direction), inverseNormal);
+			RenTriangle& tri = tmpObj->triangleList[j];
+
+			tri.specularLight = 0.0f;
+
+			RenVector3D N(-tri.normal.x, -tri.normal.y, -tri.normal.z);
+			Vector3DNormalize(&N);
+
+			// Diffuse lighting
+			float NdotL = CalculateDotProduct3D(N, L);
 
 			//TODO divise the lengh of each vector
-			tmpObj->triangleList[j].angNormalDiffuseLight = tmp;
+			tri.angNormalDiffuseLight = (NdotL > 0.0f ? NdotL : 0) * renLight[difIndex].I;
 
-			tmp *= renLight[difIndex].I;
+			for (int k = 0; k < 3; k++)
+			{
+				RenVector3D N = tri.pointNormal[k];
+				// 暂时沿用现有 Lighting() 的法线方向约定
+				// N.x = -N.x;
+				// N.y = -N.y;
+				// N.z = -N.z;
+
+				float length2 =
+					N.x * N.x +
+					N.y * N.y +
+					N.z * N.z;
+
+				if (length2 < 1e-12f)
+				{
+					tri.vertexDiffuse[k] = 0.0f;
+					tri.vertexSpecular[k] = 0.0f;
+					continue;
+				}
+
+				Vector3DNormalize(&N);
+
+				float NdotL = CalculateDotProduct3D(N, L);
+
+				tri.vertexDiffuse[k] =
+					std::clamp(NdotL, 0.0f, 1.0f)
+					* renLight[difIndex].I;
+
+				tri.vertexSpecular[k] = 0.0f;
+				if (NdotL <= 0.0f)
+					continue;
+
+				const int vertexIndex = (k == 0) ? static_cast<int>(tri.pointIndex.p1)
+					: (k == 1) ? static_cast<int>(tri.pointIndex.p2)
+					: static_cast<int>(tri.pointIndex.p3);
+				const RenPoint4D& point = tmpObj->transferredPointList[vertexIndex];
+				RenVector3D V(renCamera.location.x - point.x,
+					renCamera.location.y - point.y,
+					renCamera.location.z - point.z);
+				const float vLength2 = V.x * V.x + V.y * V.y + V.z * V.z;
+				if (vLength2 < 1e-12f)
+					continue;
+				Vector3DNormalize(&V);
+
+				RenVector3D H(L.x + V.x, L.y + V.y, L.z + V.z);
+				const float hLength2 = H.x * H.x + H.y * H.y + H.z * H.z;
+				if (hLength2 < 1e-12f)
+					continue;
+				Vector3DNormalize(&H);
+
+				const float NdotH = std::clamp(CalculateDotProduct3D(N, H), 0.0f, 1.0f);
+				const float shininess = 16.0f;
+				tri.vertexSpecular[k] = std::pow(NdotH, shininess) * renLight[difIndex].I;
+
+			}
+
+			if (NdotL <= 0.0f)
+				continue;
+
+			// index of the three points
+			int i0 = tri.pointIndex.x;
+			int i1 = tri.pointIndex.y;
+			int i2 = tri.pointIndex.z;
+			const RenPoint4D& p0 = tmpObj->transferredPointList[i0];
+			const RenPoint4D& p1 = tmpObj->transferredPointList[i1];
+			const RenPoint4D& p2 = tmpObj->transferredPointList[i2];
+
+			// The centroid, geometric center of the triangle
+			RenVector3D center((p0.x + p1.x + p2.x) / 3.0f, (p0.y + p1.y + p2.y) / 3.0f, (p0.z + p1.z + p2.z) / 3.0f);
+
+			RenVector3D V(renCamera.location.x - center.x,
+				renCamera.location.y - center.y,
+				renCamera.location.z - center.z);
+			Vector3DNormalize(&V);
+
+			// Halfway vector
+			RenVector3D H(L.x + V.x, L.y + V.y, L.z + V.z);
+
+			float hLength2 =
+				H.x * H.x + H.y * H.y + H.z * H.z;
+			if (hLength2 < 1e-8f)
+				continue;
+
+			Vector3DNormalize(&H);
+
+			float NdotH = CalculateDotProduct3D(N, H);
+			if (NdotH > 0.0f)
+			{
+				float shininess = 16.0f;
+				tri.specularLight = std::pow(NdotH, shininess) * renLight[difIndex].I;
+			}
+			else
+			{
+				tri.specularLight = 0;
+			}
+
+
 		}
 	}
 }

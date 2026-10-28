@@ -42,7 +42,7 @@ typedef struct RenPoint2D
 	}
 	RenPoint2D(float f[2])
 	{
-		x = f[0]; y = f[1]; 
+		x = f[0]; y = f[1];
 	}
 }RenPoint2D, RenVector2D, * RenVector2DPtr, * RenPoint2DPtr;
 
@@ -61,9 +61,9 @@ typedef struct RenPoint3D
 	};
 	RenPoint3D(float x1 = 0, float y1 = 0, float z1 = 0)
 	{
-		x = x1; y = y1; z = z1; 
+		x = x1; y = y1; z = z1;
 	}
-	RenPoint3D(float *fp)
+	RenPoint3D(float* fp)
 	{
 		x = *fp; y = *(fp + 1); z = *(fp + 2);
 	}
@@ -71,11 +71,11 @@ typedef struct RenPoint3D
 	{
 		x = x1; y = y1; z = z1;
 	}
-	void SetValue(const RenPoint3D &p)
+	void SetValue(const RenPoint3D& p)
 	{
 		x = p.x; y = p.y; z = p.z;
 	}
-}RenPoint3D, RenVector3D, *RenVector3DPtr, * RenPoint3DPtr;
+}RenPoint3D, RenVector3D, * RenVector3DPtr, * RenPoint3DPtr;
 
 typedef struct RenMatrix4D
 {
@@ -88,7 +88,7 @@ typedef struct RenPoint4D
 	RenColor color;
 	RenVector3D normal;
 	RenPoint4D(float x1 = 1, float y1 = 0, float z1 = 0, float w1 = 1)
-	{ 
+	{
 		x = x1; y = y1; z = z1; w = w1;
 	}
 	RenPoint4D(float f[4])
@@ -103,7 +103,7 @@ typedef struct RenPoint4D
 		z = p2.z - p1.z;
 		w = 1;
 	}
-	
+
 	void SetValue(float x1, float y1, float z1, float w1)
 	{
 		x = x1; y = y1; z = z1; w = w1;
@@ -150,16 +150,17 @@ typedef struct RenTextureCoor
 
 typedef struct RenVertex4D
 {
-
 	RenPoint4D p;
 	RenTextureCoor t;
 	RenVector3D normal;
 	RenColor color;
+	float diffuse = 0.0f;
+	float specular = 0.0f;
 }RenVertex4D, * RenVertex4DPtr;
 
 typedef struct RenBMP
 {
-	unsigned char *buffer;
+	unsigned char* buffer;
 	int width;
 	int height;
 	RGBQUAD* pColorTable;
@@ -169,7 +170,7 @@ typedef struct RenBMP
 	{
 		FILE* fp = fopen(name, "rb");
 		if (fp == 0) return 0;
-		fseek(fp, sizeof(BITMAPFILEHEADER),0);
+		fseek(fp, sizeof(BITMAPFILEHEADER), 0);
 		BITMAPINFOHEADER head;
 		fread(&head, sizeof(BITMAPINFOHEADER), 1, fp);
 		this->width = head.biWidth;
@@ -189,19 +190,19 @@ typedef struct RenBMP
 	RenColor getPixelColor(int i, int j)
 	{
 		RenColor ret;
-		if (i < 0 || i > width || j < 0 || j > height)
+		if (i < 0 || i >= width || j < 0 || j >= height)
 		{
 			ret.setValue(1, 255, 255, 255);
 			return ret;
 		}
-		unsigned char* base = buffer + i * lineByte + j * 3;
+		unsigned char* base = buffer + j * lineByte + i * 3;
 		unsigned char b = *(base);
 		unsigned char g = *(base + 1);
 		unsigned char r = *(base + 2);
 		ret.setValue(1, b, g, r);
 		return ret;
 	}
-}RenBMP, *RenBMPPtr;
+}RenBMP, * RenBMPPtr;
 
 typedef struct RenTexture
 {
@@ -214,7 +215,7 @@ typedef struct RenMaterial
 	RenVector4D diffuse;
 	RenVector4D specular;
 	float shininess;
-} RenMaterial, *RenMaterialPtr;
+} RenMaterial, * RenMaterialPtr;
 
 typedef struct RenTriangle
 {
@@ -222,21 +223,27 @@ typedef struct RenTriangle
 	RenVector3D texIndex;
 	RenVector3D normal;
 	RenVector3D originalNormal;
-	RenVector3D pointNormal[3];//for Goulaud shading
+	RenVector3D pointNormal[3]; //for gouraud shading
 	RenPoint4DPtr pointListPtr;
 	RenTextureCoorPtr textureCoorListPtr;
 	int state;
 	float angNormalDiffuseLight;
+	float specularLight;
 
-	RenTriangle (int pi1 = 0, int pi2 = 1, int pi3 = 2, int ti1 = 0, int ti2 = 1, int ti3 = 2)
+	// for gouraud shading
+	float vertexDiffuse[3] = {};
+	float vertexSpecular[3] = {};
+
+	RenTriangle(int pi1 = 0, int pi2 = 1, int pi3 = 2, int ti1 = 0, int ti2 = 1, int ti3 = 2)
 	{
-		pointIndex.SetValue(pi1, pi2, pi3); 
-		texIndex.SetValue(ti1, ti2, ti3); 
+		pointIndex.SetValue(pi1, pi2, pi3);
+		texIndex.SetValue(ti1, ti2, ti3);
 		normal.SetValue(1, 0, 0);
 		originalNormal.SetValue(1, 0, 0);
 		pointListPtr = 0;
 		textureCoorListPtr = 0;
-		angNormalDiffuseLight = 0;
+		angNormalDiffuseLight = 0.0f;
+		specularLight = 0.0f;
 		state = BACKFACE_DETECTION_VALIDATED;
 	}
 	void resetNormal()
@@ -250,10 +257,11 @@ typedef struct RenPrimitive
 	RenVertex4D v[3];
 	RenColor c; // used for wireframe mode
 	//RenVector3D normal;
-	//TODO: 
+	//TODO:
 	//BitMapPtr *map;
 	//int renderMode;
 	float angNormalDiffuseLight;
+	float specularLight;
 	int state;
 	int objetcIndex; // which object does this primitive belong to?
 	//float angleWithSunLight;

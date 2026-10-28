@@ -45,7 +45,7 @@ private:
 	void LoadObjectFormModelASE(const string& folderPath, const string& fileName);
 
 	void AddLight(int att, float intensity, RenColor c, RenVector4D dir, RenVector4D loc);
-	
+
 	void GenerateRenderingList();
 	void PreRendering();
 
@@ -54,7 +54,7 @@ private:
 	void ReadKeyInput();
 
 	void LocalTransformation(RenVector3D worldPos, float radX, float radY, float radZ, float scale, int objIndex);
-	void LocalToWorldTransformation(RenVector4D &worldPos);
+	void LocalToWorldTransformation(RenVector4D& worldPos);
 	void WorldToCameraTransformation();
 	void CameraToProjectionTransformation();
 	void IsObjectOutOfBoundary();
@@ -64,15 +64,15 @@ private:
 
 	void Rasterization();
 	void DrawPrimitive(RenPrimitive& pri);
-	void DrawPrimitiveFlatTop(RenPoint4D& p1, RenPoint4D& p2, RenPoint4D& p3, RenTextureCoor& t1, RenTextureCoor& t2, RenTextureCoor& t3, int objIndex, float diffuseLightAng);
-	void DrawPrimitiveFlatButton(RenPoint4D& p1, RenPoint4D& p2, RenPoint4D& p3, RenTextureCoor& t1, RenTextureCoor& t2, RenTextureCoor& t3, int objIndex, float diffuseLightAng);
+	void DrawPrimitiveFlatTop(RenPoint4D& p1, RenPoint4D& p2, RenPoint4D& p3, RenTextureCoor& t1, RenTextureCoor& t2, RenTextureCoor& t3, int objIndex, float diffuseLightAng, float specularLight, float d1, float d2, float d3, float s1, float s2, float s3);
+	void DrawPrimitiveFlatButton(RenPoint4D& p1, RenPoint4D& p2, RenPoint4D& p3, RenTextureCoor& t1, RenTextureCoor& t2, RenTextureCoor& t3, int objIndex, float diffuseLightAng, float specularLight, float d1, float d2, float d3, float s1, float s2, float s3);
 	void DrawLine(float x1, float y1, float x2, float y2, RenColor renColor);
 
 	void ResetZBuffer();
 
 public:
 	RenCamera renCamera;
-	
+
 	RenLight renLight[MAX_NUM_LIGHTS];
 	RenObject renObjectList[MAX_NUM_OBJECTS];
 	RenPrimitive renRenderingList[MAX_NUM_PRIMITAVE]; //renderinglist contains all the primitives from all the objects.
@@ -81,7 +81,7 @@ public:
 	int numberOfLights = 0;
 	int numberOfObjects = 0;
 	int numberOfPrimitives = 0;
-	
+
 	int numberOfTextures = 0;
 	int x, y, w, h;
 
